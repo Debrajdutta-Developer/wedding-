@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// User & Authentication
+// ============================================================================
+
+enum UserRole {
+  HOST
+  FAMILY_MEMBER
+  PHOTOGRAPHER
+  GUEST
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      UserRole
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  eventsCreated Event[]
+  checkIns      GuestCheckInRecord[]
+  mediaAssets   MediaAsset[]
+
+  @@index([email])
+}
+
+// ============================================================================
+// Event Management
+// ============================================================================
+
+model Event {
+  id              String   @id @default(cuid())
+  title           String
+  date            DateTime
+  venue           String
+  budgetLimit     Float
+  currentExpenses Float    @default(0)
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  createdBy    User              @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  guestGroups  GuestGroup[]
+  guests       Guest[]
+  vendors      Vendor[]
+  mediaAssets  MediaAsset[]
+  checkIns     GuestCheckInRecord[]
+
+  @@index([createdById])
+  @@index([date])
+}
+
+model GuestGroup {
+  id                   String   @id @default(cuid())
+  groupName            String
+  eventId              String
+  totalAllocatedPlates Int
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relations
+  event  Event   @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  guests Guest[]
+
+  @@index([eventId])
+}
+
+// ============================================================================
+// Guest Management
+// ============================================================================
+
+enum RSVPStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+}
+
+enum DietaryPreference {
+  VEG
+  NON_VEG
+}
+
+model Guest {
+  id                 String            @id @default(cuid())
+  name               String
+  email              String
+  phone              String
+  groupId            String
+  rsvpStatus         RSVPStatus        @default(PENDING)
+  checkedIn          Boolean           @default(false)
+  qrCodeHash         String            @unique
+  dietaryPreference  DietaryPreference
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  // Relations
+  group     GuestGroup            @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  event     Event                 @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  eventId   String
+  checkIns  GuestCheckInRecord[]
+
+  @@index([groupId])
+  @@index([eventId])
+  @@index([qrCodeHash])
+  @@index([email])
+}
+
+model GuestCheckInRecord {
+  id              String   @id @default(cuid())
+  guestId         String
+  eventId         String
+  checkedInAt     DateTime @default(now())
+  checkedInByRole UserRole
+  createdAt       DateTime @default(now())
+
+  // Relations
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Restrict)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@index([guestId])
+  @@index([eventId])
+}
+
+// ============================================================================
+// Vendor & Budget
+// ============================================================================
+
+enum VendorStatus {
+  PAID
+  PENDING
+}
+
+model Vendor {
+  id          String       @id @default(cuid())
+  name        String
+  serviceType String       // catering, photography, decoration, etc
+  cost        Float
+  status      VendorStatus @default(PENDING)
+  eventId     String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@index([eventId])
+  @@index([serviceType])
+}
+
+// ============================================================================
+// Media & Assets
+// ============================================================================
+
+enum MediaAssetRole {
+  PHOTOGRAPHER
+  HOST
+  GUEST
+}
+
+model MediaAsset {
+  id            String         @id @default(cuid())
+  url           String
+  uploadedByRole MediaAssetRole
+  uploadedByUserId String
+  eventId       String
+  metadata      Json?          // Stores width, height, mimeType, size
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  uploadedBy User  @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  event      Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@index([eventId])
+  @@index([uploadedByUserId])
+}
